@@ -34,7 +34,7 @@ python3 -m http.server 8000     # run from the repo root; paths match production
 | `static/*` | Images and other static files |
 | `index.html` | API reference page. Endpoints are read from `api/index.json`, so new ones appear automatically |
 | `examples/` | Reference client for the desktop app. **Never published** |
-| `CNAME` `.nojekyll` | Required for deployment — do not delete |
+| `CNAME` `.nojekyll` | Kept in the publish tree — do not delete. Note that with **Actions** deployment the `CNAME` file does **not** set the custom domain by itself (measured: `cname` stayed `null` with the file present); the domain comes from the Pages setting below |
 
 `api/index.json` is the endpoint index: clients hardcode that one address and
 discover the rest from its response. A `path` in JSON is always **repo-relative**
