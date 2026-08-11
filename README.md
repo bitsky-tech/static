@@ -110,20 +110,26 @@ permanently immutable and unaffected by either cache:
 https://gcore.jsdelivr.net/gh/bitsky-tech/static@<commit-sha>/static/logo.png
 ```
 
-## Known constraints (all measured, not assumed)
+## Known constraints
 
-| Constraint | Measured | Consequence |
+| Constraint | Value | Consequence |
 |---|---|---|
 | 404 response | 9379 B, `content-type: text/html` | Clients must check `res.ok`, or `res.json()` throws an opaque parse error |
 | CORS | `access-control-allow-origin: *` | Clients can fetch cross-origin directly; no proxy needed |
-| Published size | 1 GB (GitHub soft limit) | Total size of everything published. A few dozen images is tens of MB — far from it |
-| Monthly bandwidth | 100 GB (GitHub soft limit) | Outbound traffic. At 2 MB per image that is ~50k image requests/month; 100 desktop clients pulling 10 images a day would reach ~60 GB |
+| Published size | **1 GB, enforced** — "Published GitHub Pages sites may be no larger than 1 GB" | Not a soft limit. A few dozen images is tens of MB, so far from it |
+| Source repo size | 1 GB **recommended** (a separate limit from the one above) | Keeping build output out of git helps here — nothing is generated into the repo |
+| Monthly bandwidth | 100 GB/month, **soft** | Outbound traffic. At 2 MB per image ≈ 50k image requests/month; 100 desktop clients pulling 10 images a day ≈ 60 GB |
+| Build frequency | 10 builds/hour soft limit, which **does not apply to custom Actions workflows** | This repo deploys via Actions, so it is exempt |
 | Reachability in China | `github.io` transfers get cut mid-stream; on one tested network it failed 3/3 while `api.github.com` stayed up. The **custom domain was unaffected** — the block follows the hostname | Clients still ship the mirror fallback, but `static.bridgic.ai` is usable as the primary |
 | Mirror node location | Served from US nodes (`cf-ray … -SJC`, Fastly `FRA`/`DFW`); jsDelivr's mainland-China nodes were retired | ~0.75s from a China network — fine as a fallback, not as a primary |
 
-> "Soft limit" means GitHub does not hard-block at the number; it reserves the
-> right to contact you or throttle. Both figures come from GitHub's documentation
-> and are the two values here that are **not** measured.
+> The wording distinction matters: published size says "may be no larger than"
+> (enforced — the deploy fails), while bandwidth and build frequency are
+> explicitly "soft", meaning GitHub reserves the right to contact you or throttle
+> rather than hard-blocking. These four rows are quoted from
+> [GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)
+> and are the only values in this README that are **documentation rather than
+> measured**.
 
 ## Changing the owner
 
