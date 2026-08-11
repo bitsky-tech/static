@@ -126,7 +126,10 @@
 // paths -- otherwise previewing over `python3 -m http.server` would hand you
 // 127.0.0.1 URLs that are useless when pasted into code.
 const PROD = 'https://static.bridgic.ai'
-const MIRROR = 'https://cdn.jsdelivr.net/gh/bitsky-tech/static@main'
+// gcore, not the documented cdn.jsdelivr.net: cdn/fastly answer image requests
+// with a 301 to raw.githubusercontent.com, which is less reliable than either
+// origin. gcore serves image bytes directly.
+const MIRROR = 'https://gcore.jsdelivr.net/gh/bitsky-tech/static@main'
 
 const SNIPPET = `const client = new StaticAssetClient()
 

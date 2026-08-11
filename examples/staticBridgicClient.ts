@@ -27,7 +27,18 @@
 import { z } from 'zod'
 
 const DEFAULT_BASE = 'https://static.bridgic.ai'
-const DEFAULT_MIRROR = 'https://cdn.jsdelivr.net/gh/bitsky-tech/static@main'
+/**
+ * Bootstrap mirror, hardcoded because the very first request can fail and at
+ * that point nothing has been read to learn a mirror from.
+ *
+ * Deliberately `gcore.jsdelivr.net` rather than the documented
+ * `cdn.jsdelivr.net`: cdn/fastly answer *image* requests with a 301 to
+ * raw.githubusercontent.com, and raw measured less reliable than either origin,
+ * so images would have had no real fallback. gcore serves the bytes directly
+ * (image/png, CORS *, max-age=604800, 5/5 at ~0.75s). If jsDelivr ever retires
+ * this subdomain, fall back to cdn.jsdelivr.net and accept the extra raw hop.
+ */
+const DEFAULT_MIRROR = 'https://gcore.jsdelivr.net/gh/bitsky-tech/static@main'
 
 /** Short, because its only job is to decide "primary is not answering". */
 const PRIMARY_TIMEOUT_MS = 3_000

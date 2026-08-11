@@ -81,14 +81,15 @@ const images = await client.images()   // every entry carries url + mirror
 | CORS | `access-control-allow-origin: *` | Clients can fetch cross-origin directly; no proxy needed |
 | Published size | 1 GB official soft limit | A few dozen images is nowhere near it |
 | Monthly bandwidth | 100 GB official soft limit | Roughly 50k requests for 2 MB images |
-| Reachability in China | `github.io` transfers get cut mid-stream (1 failure in 3 measured) | Clients need the jsDelivr fallback, implemented in `examples/` |
+| Reachability in China | `github.io` transfers get cut mid-stream; on one tested network it failed 3/3 while `api.github.com` stayed up | Clients need the mirror fallback, implemented in `examples/` |
+| Mirror endpoint choice | `cdn.jsdelivr.net` and `fastly.jsdelivr.net` answer **image** requests with a 301 to `raw.githubusercontent.com`; `gcore.jsdelivr.net` serves the bytes directly | The mirror is pinned to `gcore` — via `cdn` images would fall back onto raw, which measured less reliable than either origin |
 
 **While iterating on assets:** preview locally with `http.server` and push once
 settled. To verify production immediately, use the jsDelivr commit form — that
 URL is permanently immutable and unaffected by the 600s cache:
 
 ```
-https://cdn.jsdelivr.net/gh/bitsky-tech/static@<commit-sha>/static/logo.png
+https://gcore.jsdelivr.net/gh/bitsky-tech/static@<commit-sha>/static/logo.png
 ```
 
 ## Changing the owner
