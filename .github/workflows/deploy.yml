@@ -50,3 +50,45 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v5
+
+      # Verified from inside the runner on purpose: github.io is blocked on some
+      # networks (including the one this repo was authored from), so a curl from
+      # a dev machine cannot confirm the site actually serves what we expect.
+      # Checks content-type too -- a JSON route silently served as text/plain
+      # would break clients that branch on it.
+      - name: Smoke test the deployed site
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          base="${PAGE_URL%/}"
+          echo "Testing $base"
+
+          # deploy-pages returns before the CDN has finished propagating.
+          for i in $(seq 1 6); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$base/api/index.json" || true)
+            [ "$code" = "200" ] && break
+            echo "  waiting for propagation (attempt $i, got $code)"
+            sleep 10
+          done
+
+          fail=0
+          check() {
+            # curl already emits "000 " via -w on failure, so don't append another
+            # fallback line -- that would concatenate into a misleading "000 000 -".
+            out=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 20 "$base$1") || true
+            [ -n "$out" ] || out="000 -"
+            code=${out%% *}
+            type=${out#* }
+            verdict=ok
+            [ "$code" = "$2" ] || verdict=FAIL
+            case "$type" in "$3"*) ;; *) verdict=FAIL ;; esac
+            printf '  %-20s %s  %-34s %s\n' "$1" "$code" "$type" "$verdict"
+            [ "$verdict" = ok ] || fail=1
+          }
+
+          check /                 200 text/html
+          check /api/index.json   200 application/json
+          check /api/images.json  200 application/json
+          check /static/logo.png  200 image/png
+          check /static/hero.png  200 image/png
+          exit $fail
