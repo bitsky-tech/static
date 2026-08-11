@@ -71,30 +71,62 @@ const client = new StaticAssetClient()
 const images = await client.images()   // every entry carries url + mirror
 ```
 
-## Known constraints (all measured, not assumed)
+## Caching
 
-| Constraint | Measured | Consequence |
+The JSON routes are API endpoints, so staleness is treated as a bug. Three layers
+cache independently:
+
+| Layer | JSON | Images |
 |---|---|---|
-| CDN cache | `cache-control: max-age=600` | **After replacing a file in place, clients may see stale bytes for up to 10 minutes** |
-| `?v=` cache busting | **Ineffective** — query stripped from the cache key | The only ways to force fresh bytes are renaming the file or the jsDelivr commit form below |
-| 404 response | 9379 B, `content-type: text/html` | Clients must check `res.ok`, or `res.json()` throws an opaque parse error |
-| CORS | `access-control-allow-origin: *` | Clients can fetch cross-origin directly; no proxy needed |
-| Published size | 1 GB official soft limit | A few dozen images is nowhere near it |
-| Monthly bandwidth | 100 GB official soft limit | Roughly 50k requests for 2 MB images |
-| Reachability in China | `github.io` transfers get cut mid-stream; on one tested network it failed 3/3 while `api.github.com` stayed up | Clients need the mirror fallback, implemented in `examples/` |
-| Mirror endpoints (split) | `cdn`/`fastly` answer **image** requests with a 301 to `raw.githubusercontent.com`, but they are the **only** ones jsDelivr's purge clears (`providers: {CF, FY}`). `gcore` serves images directly but purge never reaches it — measured after a publish: `cdn` at `age: 0` with new content, `gcore` still serving a 3.5h-old copy | JSON is mirrored via **`cdn`** (freshness wins for API reads), images via **`gcore`** (reliable transfer wins, and image bytes rarely change) |
-| Mirror cache | jsDelivr serves `@main` with `s-maxage=43200` (12h at the CDN) and `max-age=604800` (7d at the client); a pinned `@<sha>` is `immutable` for a year | For JSON both layers are neutralised: the client sends `cache: 'no-cache'` (revalidate every read, 304 when unchanged — the origin sends an ETag) and the workflow purges after every publish. **For images the 12h applies** — rename rather than overwrite when it matters |
-| Mirror node location | Served from US nodes (`cf-ray … -SJC`, Fastly `FRA`/`DFW`); jsDelivr's mainland-China nodes were retired | ~0.75s from a China network — usable as a fallback, not as a primary |
+| Client | `cache: 'no-cache'` — revalidates every read, 304 when unchanged | cached normally; bytes rarely change |
+| Primary CDN | `max-age=600`, **not removable** — Pages cannot set response headers | same |
+| Mirror CDN | purged automatically on every publish | **12h window remains** |
+
+`no-cache` rather than `no-store`: the origin sends an ETag, so a revalidation
+that finds nothing new costs a 304 with an empty body instead of re-transferring
+the whole thing — which matters against the bandwidth limit below.
+
+**Mirrors are split by resource type**, because JSON and images need opposite
+things and no single jsDelivr endpoint gives both:
+
+- **JSON → `cdn.jsdelivr.net`** — the only endpoint purge clears
+  (`providers: {CF, FY}`). Measured after one publish: `cdn` served the new commit
+  at `age: 0` while `gcore` was still handing out a 3.5-hour-old copy.
+- **Images → `gcore.jsdelivr.net`** — `cdn`/`fastly` answer image requests with a
+  301 to `raw.githubusercontent.com`, which measured less reliable than either origin.
+
+**Two limits to know:**
+
+1. A replaced file is invisible for up to 10 minutes on the primary origin, and
+   `?v=` does not help — the query string is stripped from the cache key.
+2. A replaced **image** can stay up to 12h stale on the asset mirror, which purge
+   cannot reach. Rename the file instead of overwriting it.
 
 **While iterating on assets:** preview locally with `http.server` and push once
-settled. To verify production immediately, use the jsDelivr commit form — that
-URL is permanently immutable and unaffected by the 600s cache:
+settled. To check production immediately, pin a commit sha — that URL is
+permanently immutable and unaffected by either cache:
 
 ```
 https://gcore.jsdelivr.net/gh/bitsky-tech/static@<commit-sha>/static/logo.png
 ```
 
+## Known constraints (all measured, not assumed)
+
+| Constraint | Measured | Consequence |
+|---|---|---|
+| 404 response | 9379 B, `content-type: text/html` | Clients must check `res.ok`, or `res.json()` throws an opaque parse error |
+| CORS | `access-control-allow-origin: *` | Clients can fetch cross-origin directly; no proxy needed |
+| Published size | 1 GB (GitHub soft limit) | Total size of everything published. A few dozen images is tens of MB — far from it |
+| Monthly bandwidth | 100 GB (GitHub soft limit) | Outbound traffic. At 2 MB per image that is ~50k image requests/month; 100 desktop clients pulling 10 images a day would reach ~60 GB |
+| Reachability in China | `github.io` transfers get cut mid-stream; on one tested network it failed 3/3 while `api.github.com` stayed up. The **custom domain was unaffected** — the block follows the hostname | Clients still ship the mirror fallback, but `static.bridgic.ai` is usable as the primary |
+| Mirror node location | Served from US nodes (`cf-ray … -SJC`, Fastly `FRA`/`DFW`); jsDelivr's mainland-China nodes were retired | ~0.75s from a China network — fine as a fallback, not as a primary |
+
+> "Soft limit" means GitHub does not hard-block at the number; it reserves the
+> right to contact you or throttle. Both figures come from GitHub's documentation
+> and are the two values here that are **not** measured.
+
 ## Changing the owner
 
-Two places: `DEFAULT_MIRROR` in `examples/staticBridgicClient.ts`, and the value
+Three places: `DEFAULT_JSON_MIRROR` and `DEFAULT_ASSET_MIRROR` in
+`examples/staticBridgicClient.ts`, and the value
 of the DNS CNAME record above.
