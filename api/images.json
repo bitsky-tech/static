@@ -1,0 +1,16 @@
+{
+  "images": [
+    {
+      "name": "logo",
+      "path": "static/logo.png",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "name": "hero",
+      "path": "static/hero.png",
+      "width": 1600,
+      "height": 900
+    }
+  ]
+}

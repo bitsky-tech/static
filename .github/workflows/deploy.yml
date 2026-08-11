@@ -1,0 +1,46 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# pages:write + id-token:write are what deploy-pages needs. contents stays
+# read-only because nothing is ever pushed back to the repo.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. cancel-in-progress is deliberately false: killing a
+# half-finished deploy can leave the site serving a partial tree.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # No build step -- repo paths are the published paths. This only picks out
+      # what should be public, so README.md and examples/ stay off the live site.
+      - name: Assemble publish tree
+        run: |
+          mkdir -p _site
+          cp -R api static CNAME .nojekyll index.html _site/
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+          # v5 tars with `--exclude=.[^/]*` unless this is on, which would
+          # silently drop .nojekyll from the published tree.
+          include-hidden-files: true
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

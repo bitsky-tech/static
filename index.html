@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>static.bridgic.ai — API reference</title>
+<!-- Inline SVG favicon. Without it the browser requests /favicon.ico, which on
+     GitHub Pages costs a 9KB HTML 404 on every single page load. -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232b6cb0'/><text x='16' y='24' font-family='sans-serif' font-size='21' font-weight='700' fill='white' text-anchor='middle'>b</text></svg>">
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1a1a18; --dim: #6b6b66; --line: #e2e2de;
+    --card: #fff; --code: #f4f4f1; --accent: #2b6cb0; --ok: #2f7d4f; --bad: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a; --fg: #e8e8e4; --dim: #8b8b85; --line: #2c2d31;
+      --card: #1e1f23; --code: #141518; --accent: #7bb0e8; --ok: #6cc48d; --bad: #e8796b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.5rem 5rem; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 { font-size: .95rem; margin: 2.6rem 0 .8rem; padding-bottom: .4rem; border-bottom: 1px solid var(--line); }
+  .lede { color: var(--dim); font-size: .86rem; margin: 0 0 .4rem; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  code { background: var(--code); border: 1px solid var(--line); border-radius: 4px; padding: .1em .38em; font-size: .84em; }
+  pre {
+    background: var(--code); border: 1px solid var(--line); border-radius: 6px;
+    padding: .7rem .8rem; overflow-x: auto; font-size: .78rem; line-height: 1.5; margin: .5rem 0 0;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+
+  ul.rules { margin: 0; padding-left: 1.15rem; }
+  ul.rules li { margin: .35rem 0; }
+  ul.rules b { font-weight: 600; }
+
+  .ep { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .8rem .9rem; margin-bottom: .7rem; }
+  .ep-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .ep-name { font-weight: 600; font-size: .9rem; }
+  .badge { font-size: .7rem; padding: .1rem .4rem; border-radius: 4px; border: 1px solid var(--line); color: var(--dim); }
+  .badge.ok { color: var(--ok); border-color: currentColor; }
+  .badge.bad { color: var(--bad); border-color: currentColor; }
+  .urlrow { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+  .urlrow input {
+    flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: .78rem;
+    padding: .38rem .5rem; border: 1px solid var(--line); border-radius: 5px;
+    background: var(--code); color: var(--fg);
+  }
+  button {
+    font: inherit; font-size: .76rem; padding: .38rem .7rem; cursor: pointer; white-space: nowrap;
+    border: 1px solid var(--line); border-radius: 5px; background: var(--card); color: var(--fg);
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.done { color: var(--ok); border-color: var(--ok); }
+  details { margin-top: .5rem; }
+  summary { cursor: pointer; font-size: .78rem; color: var(--dim); }
+  summary:hover { color: var(--accent); }
+
+  .assets { display: grid; gap: .5rem; }
+  .asset { display: flex; align-items: center; gap: .6rem; background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: .45rem .6rem; }
+  .asset img {
+    width: 36px; height: 36px; object-fit: contain; flex-shrink: 0; border-radius: 4px;
+    background: repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 50%/8px 8px;
+  }
+  .asset .an { font-size: .82rem; font-weight: 600; }
+  .asset .ad { font-size: .72rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* The name block takes only what it needs; the URL field gets the rest, so the
+     full address stays readable instead of truncating to "https://static.bridg". */
+  .asset .grow { flex: 0 1 auto; min-width: 90px; }
+  .asset .urlrow { flex: 1 1 300px; margin-top: 0; }
+  .warn { color: var(--bad); font-size: .8rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>static.bridgic.ai</h1>
+  <p class="lede">Static data source for bridgic clients. No build step &mdash; a repo path is the published path.</p>
+  <p class="lede" id="health">Probing endpoints&hellip;</p>
+
+  <h2>Data contract</h2>
+  <ul class="rules">
+    <li>A <code>path</code> in JSON is always <b>repo-relative</b> (e.g. <code>static/logo.png</code>),
+        never a full URL. Clients join <code>base + path</code> &mdash; so moving to another domain or
+        CDN later means changing one client constant instead of every file.</li>
+    <li>The entry point is <code>api/index.json</code>; its <code>endpoints</code> map lists everything
+        else. Clients <b>hardcode only that one address</b> and discover the rest from the response.</li>
+    <li>Every asset has a primary and a mirror URL. Fall back to the mirror on timeout &mdash;
+        <code>github.io</code> gets its transfers cut mid-stream on mainland-China networks
+        (measured: 1 failure in 3).</li>
+    <li><b>Responses are cached for 600s</b>: <code>cache-control: max-age=600</code>, and
+        <code>?v=2</code>-style busting <b>does not work</b> (the query string is stripped out of the
+        cache key). After replacing a file in place, clients may see stale bytes for up to 10 minutes.</li>
+    <li>A missing path returns a <b>9379-byte HTML</b> 404, not JSON. Clients must check
+        <code>res.ok</code> first, or <code>res.json()</code> throws an opaque parse error.</li>
+  </ul>
+
+  <h2>Endpoints</h2>
+  <div id="endpoints"></div>
+
+  <h2>Static assets</h2>
+  <div class="assets" id="assets"></div>
+
+  <h2>Mirror</h2>
+  <p class="lede">Fallback for when the primary origin is unreachable. Append any repo-relative path.</p>
+  <div class="urlrow" id="mirrorrow"></div>
+  <p class="lede" style="margin-top:.6rem">
+    To bypass the 600s cache and verify production immediately, replace <code>@main</code> with a
+    specific commit sha &mdash; that URL is permanently immutable.
+  </p>
+
+  <h2>Client usage</h2>
+  <p class="lede">Full implementation in <code>examples/staticBridgicClient.ts</code>, ready to copy into <code>apps/electron/src/renderer/lib/</code>.</p>
+  <pre><code id="snippet"></code></pre>
+  <div class="urlrow" style="margin-top:.6rem">
+    <button id="copysnippet">Copy snippet</button>
+  </div>
+</div>
+
+<script>
+// Displayed and copied URLs are always production, while fetches use relative
+// paths -- otherwise previewing over `python3 -m http.server` would hand you
+// 127.0.0.1 URLs that are useless when pasted into code.
+const PROD = 'https://static.bridgic.ai'
+const MIRROR = 'https://cdn.jsdelivr.net/gh/bitsky-tech/static@main'
+
+const SNIPPET = `const client = new StaticAssetClient()
+
+// Endpoint index -- the only address that needs hardcoding
+const index = await client.getJson('api/index.json', indexManifestSchema)
+
+// Image manifest; every entry already carries url + mirror
+const images = await client.images()
+images[0].url     // ${PROD}/static/logo.png
+images[0].mirror  // ${MIRROR}/static/logo.png`
+
+const $ = (id) => document.getElementById(id)
+const el = (tag, cls) => Object.assign(document.createElement(tag), cls ? { className: cls } : {})
+
+const bytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`)
+
+/** A read-only URL field plus a copy button that confirms in place. */
+function urlRow(url, into) {
+  const row = into ?? el('div', 'urlrow')
+  row.classList.add('urlrow')
+  const input = el('input')
+  input.value = url
+  input.readOnly = true
+  input.addEventListener('focus', () => input.select())
+
+  const btn = el('button')
+  btn.textContent = 'Copy'
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      // clipboard needs a secure context; select() lets the user hit cmd-C.
+      input.select()
+    }
+    btn.textContent = 'Copied'
+    btn.classList.add('done')
+    setTimeout(() => {
+      btn.textContent = 'Copy'
+      btn.classList.remove('done')
+    }, 1400)
+  })
+
+  row.append(input, btn)
+  return row
+}
+
+async function probe(path) {
+  const res = await fetch(`./${path}`, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`${res.status}`)
+  const text = await res.text()
+  return { size: new Blob([text]).size, type: res.headers.get('content-type') ?? '?', data: JSON.parse(text) }
+}
+
+function endpointCard(name, path, result, error) {
+  const card = el('div', 'ep')
+  const head = el('div', 'ep-head')
+  const label = el('span', 'ep-name')
+  label.textContent = name
+  head.append(label)
+
+  const status = el('span', error ? 'badge bad' : 'badge ok')
+  status.textContent = error ? `failed ${error}` : '200'
+  head.append(status)
+
+  if (result) {
+    for (const t of [result.type.split(';')[0], bytes(result.size)]) {
+      const b = el('span', 'badge')
+      b.textContent = t
+      head.append(b)
+    }
+  }
+  card.append(head, urlRow(`${PROD}/${path}`))
+
+  if (result) {
+    const details = el('details')
+    const summary = el('summary')
+    summary.textContent = 'Response'
+    const pre = el('pre')
+    const code = el('code')
+    code.textContent = JSON.stringify(result.data, null, 2)
+    pre.append(code)
+    details.append(summary, pre)
+    card.append(details)
+  }
+  return card
+}
+
+function assetRow(entry) {
+  const row = el('div', 'asset')
+  const img = el('img')
+  img.src = `./${entry.path}`   // relative, so the thumbnail also works locally
+  img.alt = entry.name
+  img.loading = 'lazy'
+
+  const grow = el('div', 'grow')
+  const name = el('div', 'an')
+  name.textContent = entry.name
+  const dims = el('div', 'ad')
+  dims.textContent = entry.width ? `${entry.width}×${entry.height} · ${entry.path}` : entry.path
+  grow.append(name, dims)
+
+  row.append(img, grow)
+  row.append(urlRow(`${PROD}/${entry.path}`))
+  return row
+}
+
+async function main() {
+  $('snippet').textContent = SNIPPET
+  $('copysnippet').addEventListener('click', async (e) => {
+    await navigator.clipboard.writeText(SNIPPET).catch(() => {})
+    e.target.textContent = 'Copied'
+    e.target.classList.add('done')
+    setTimeout(() => {
+      e.target.textContent = 'Copy snippet'
+      e.target.classList.remove('done')
+    }, 1400)
+  })
+  urlRow(MIRROR, $('mirrorrow'))
+
+  const eps = $('endpoints')
+  let index
+  try {
+    index = await probe('api/index.json')
+  } catch (err) {
+    $('health').innerHTML = `<span class="warn">Cannot read api/index.json (${err.message})</span>`
+    return
+  }
+  eps.append(endpointCard('index', 'api/index.json', index))
+
+  // Probing every advertised endpoint doubles as a liveness check: a red badge
+  // here means the manifest points at something that is not actually published.
+  const entries = Object.entries(index.data.endpoints ?? {})
+  let failed = 0
+  for (const [name, path] of entries) {
+    try {
+      eps.append(endpointCard(name, path, await probe(path)))
+    } catch (err) {
+      failed += 1
+      eps.append(endpointCard(name, path, null, err.message))
+    }
+  }
+  const total = entries.length + 1
+  $('health').textContent = `${total} endpoints · ${failed ? `${failed} failing` : 'all healthy'}`
+
+  const imagesPath = index.data.endpoints?.images
+  const box = $('assets')
+  if (!imagesPath) {
+    box.innerHTML = '<p class="lede">No images endpoint in api/index.json.</p>'
+    return
+  }
+  try {
+    const manifest = await probe(imagesPath)
+    const list = manifest.data.images ?? []
+    if (!list.length) box.innerHTML = '<p class="lede">Manifest is empty.</p>'
+    list.forEach((entry) => box.append(assetRow(entry)))
+  } catch (err) {
+    box.innerHTML = `<p class="warn">Failed to read ${imagesPath}: ${err.message}</p>`
+  }
+}
+
+main()
+</script>
+</body>
+</html>
