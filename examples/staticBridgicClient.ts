@@ -143,14 +143,29 @@ export class StaticAssetClient {
     return manifest.images.map((entry) => ({ ...entry, ...this.urls(entry.path) }))
   }
 
-  /** Primary origin first; on timeout or network error, retry against the mirror. */
+  /**
+   * Primary origin first; on timeout or network error, retry against the mirror.
+   *
+   * `cache: 'no-cache'` because these are API endpoints -- every read has to
+   * revalidate against the origin rather than trust a local copy. It is
+   * deliberately not `no-store`: the origin sends an ETag, so a revalidation
+   * that finds nothing new costs a 304 of a few dozen bytes instead of the whole
+   * body, which matters against the 100GB/month bandwidth limit.
+   *
+   * Without this the mirror would be the worse offender: jsDelivr answers with
+   * `max-age=604800`, so one fallback response would sit in the local cache for
+   * a week. Note this only defeats the *local* cache -- the CDN layers still
+   * cache (Pages 600s, jsDelivr 12h on @main) and cannot be bypassed from here,
+   * which is why the deploy workflow purges the mirror after publishing.
+   */
   private async fetchWithMirror(url: string): Promise<Response> {
+    const init: RequestInit = { cache: 'no-cache' }
     try {
-      return await fetch(url, { signal: AbortSignal.timeout(this.primaryTimeoutMs) })
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(this.primaryTimeoutMs) })
     } catch (err: unknown) {
       const mirrored = this.toMirror(url)
       if (mirrored === null) throw err
-      return fetch(mirrored, { signal: AbortSignal.timeout(this.mirrorTimeoutMs) })
+      return fetch(mirrored, { ...init, signal: AbortSignal.timeout(this.mirrorTimeoutMs) })
     }
   }
 

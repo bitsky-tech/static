@@ -95,6 +95,11 @@
     <li><b>Responses are cached for 600s</b>: <code>cache-control: max-age=600</code>, and
         <code>?v=2</code>-style busting <b>does not work</b> (the query string is stripped out of the
         cache key). After replacing a file in place, clients may see stale bytes for up to 10 minutes.</li>
+    <li>These are API endpoints, so <b>clients must not cache them locally</b>. Request with
+        <code>cache: 'no-cache'</code> to revalidate every read &mdash; the origin sends an ETag, so an
+        unchanged response costs a 304. This matters most on the mirror, which advertises
+        <code>max-age=604800</code>: one fallback response would otherwise sit in the local cache for
+        a week. The mirror's own 12h CDN cache is purged automatically on every publish.</li>
     <li>A missing path returns a <b>9379-byte HTML</b> 404, not JSON. Clients must check
         <code>res.ok</code> first, or <code>res.json()</code> throws an opaque parse error.</li>
   </ul>

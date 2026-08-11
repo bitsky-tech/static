@@ -92,3 +92,20 @@ jobs:
           check /static/logo.png  200 image/png
           check /static/hero.png  200 image/png
           exit $fail
+
+      # The mirror caches @main for 12h (s-maxage=43200), which for API endpoints
+      # means clients falling back could read half-day-old data. jsDelivr cannot
+      # be configured, but it can be purged, so do that on every publish.
+      #
+      # Never fails the job: the deploy already succeeded at this point, and purge
+      # is rate-limited ("throttled" in its response), so a miss here must not
+      # turn a good deployment red.
+      - name: Purge the jsDelivr mirror
+        continue-on-error: true
+        run: |
+          cd _site
+          find . -type f ! -name '.nojekyll' ! -name 'CNAME' | sed 's|^\./||' | while read -r p; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+              "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/$p" || true)
+            printf '  %-24s %s\n' "$p" "${code:-000}"
+          done
