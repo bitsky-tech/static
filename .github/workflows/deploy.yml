@@ -35,6 +35,12 @@ jobs:
           cp -R api static CNAME .nojekyll index.html _site/
 
       - uses: actions/configure-pages@v6
+        with:
+          # Pages is off on a fresh repo, and this action only *checks* by
+          # default (enablement: false), which fails the whole run. Letting it
+          # turn Pages on keeps the workflow self-contained -- no manual
+          # Settings -> Pages step, and it re-applies if someone resets it.
+          enablement: true
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
