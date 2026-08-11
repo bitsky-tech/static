@@ -28,17 +28,28 @@ import { z } from 'zod'
 
 const DEFAULT_BASE = 'https://static.bridgic.ai'
 /**
- * Bootstrap mirror, hardcoded because the very first request can fail and at
- * that point nothing has been read to learn a mirror from.
+ * Mirrors are split by resource type because JSON and images need opposite
+ * things, and no single jsDelivr endpoint gives both.
  *
- * Deliberately `gcore.jsdelivr.net` rather than the documented
- * `cdn.jsdelivr.net`: cdn/fastly answer *image* requests with a 301 to
- * raw.githubusercontent.com, and raw measured less reliable than either origin,
- * so images would have had no real fallback. gcore serves the bytes directly
- * (image/png, CORS *, max-age=604800, 5/5 at ~0.75s). If jsDelivr ever retires
- * this subdomain, fall back to cdn.jsdelivr.net and accept the extra raw hop.
+ * JSON -> `cdn.jsdelivr.net`, because that is what jsDelivr's purge API actually
+ * clears. Purge reports `providers: {CF, FY}`, and measured after a publish: cdn
+ * served the new commit at `age: 0` while gcore was still handing out a
+ * 3.5-hour-old copy. For API endpoints, being purgeable outweighs everything
+ * else. cdn only rewrites *image* requests, so JSON is served directly.
  */
-const DEFAULT_MIRROR = 'https://gcore.jsdelivr.net/gh/bitsky-tech/static@main'
+const DEFAULT_JSON_MIRROR = 'https://cdn.jsdelivr.net/gh/bitsky-tech/static@main'
+
+/**
+ * Images -> `gcore.jsdelivr.net`, because cdn/fastly answer image requests with
+ * a 301 to raw.githubusercontent.com, and raw measured less reliable than either
+ * origin -- images would have had no real fallback. gcore serves the bytes
+ * directly (image/png, CORS *, 5/5 at ~0.75s).
+ *
+ * The tradeoff: gcore is outside purge's reach, so replacing an image in place
+ * can leave up to 12h of staleness here. Rename the file instead of overwriting
+ * it when that matters.
+ */
+const DEFAULT_ASSET_MIRROR = 'https://gcore.jsdelivr.net/gh/bitsky-tech/static@main'
 
 /** Short, because its only job is to decide "primary is not answering". */
 const PRIMARY_TIMEOUT_MS = 3_000
@@ -92,29 +103,41 @@ export class StaticAssetHttpError extends Error {
 
 export interface StaticAssetClientOptions {
   baseUrl?: string
-  mirrorUrl?: string
+  jsonMirrorUrl?: string
+  assetMirrorUrl?: string
   primaryTimeoutMs?: number
   mirrorTimeoutMs?: number
 }
 
 export class StaticAssetClient {
   private readonly baseUrl: string
-  private readonly mirrorUrl: string
+  private readonly jsonMirrorUrl: string
+  private readonly assetMirrorUrl: string
   private readonly primaryTimeoutMs: number
   private readonly mirrorTimeoutMs: number
 
   constructor(opts: StaticAssetClientOptions = {}) {
     // Normalize trailing slash so path joins are predictable.
     this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, '')
-    this.mirrorUrl = (opts.mirrorUrl ?? DEFAULT_MIRROR).replace(/\/+$/, '')
+    this.jsonMirrorUrl = (opts.jsonMirrorUrl ?? DEFAULT_JSON_MIRROR).replace(/\/+$/, '')
+    this.assetMirrorUrl = (opts.assetMirrorUrl ?? DEFAULT_ASSET_MIRROR).replace(/\/+$/, '')
     this.primaryTimeoutMs = opts.primaryTimeoutMs ?? PRIMARY_TIMEOUT_MS
     this.mirrorTimeoutMs = opts.mirrorTimeoutMs ?? MIRROR_TIMEOUT_MS
   }
 
-  /** Resolve a repo-relative path such as `static/logo.png` to both origins. */
+  /** Strip leading slashes so a path joins cleanly onto any base. */
+  private static clean(path: string): string {
+    return path.replace(/^\/+/, '')
+  }
+
+  /**
+   * Resolve a repo-relative path such as `static/logo.png` to the primary origin
+   * plus the asset mirror. For JSON endpoints use getJson, which routes its
+   * fallback through the purgeable JSON mirror instead.
+   */
   urls(path: string): AssetUrls {
-    const clean = path.replace(/^\/+/, '')
-    return { url: `${this.baseUrl}/${clean}`, mirror: `${this.mirrorUrl}/${clean}` }
+    const clean = StaticAssetClient.clean(path)
+    return { url: `${this.baseUrl}/${clean}`, mirror: `${this.assetMirrorUrl}/${clean}` }
   }
 
   /**
@@ -125,8 +148,9 @@ export class StaticAssetClient {
    * query string is stripped out of the cache key.
    */
   async getJson<T>(path: string, schema: z.ZodTypeAny, label = path): Promise<T> {
-    const { url } = this.urls(path)
-    const res = await this.fetchWithMirror(url)
+    const clean = StaticAssetClient.clean(path)
+    const url = `${this.baseUrl}/${clean}`
+    const res = await this.fetchWithMirror(url, `${this.jsonMirrorUrl}/${clean}`)
     // A missing path returns a ~9KB HTML 404, so status must be checked before
     // parsing or res.json() throws an opaque SyntaxError.
     if (!res.ok) throw new StaticAssetHttpError(res.status, `GET ${url} failed with ${res.status}`)
@@ -158,21 +182,12 @@ export class StaticAssetClient {
    * cache (Pages 600s, jsDelivr 12h on @main) and cannot be bypassed from here,
    * which is why the deploy workflow purges the mirror after publishing.
    */
-  private async fetchWithMirror(url: string): Promise<Response> {
+  private async fetchWithMirror(primary: string, mirror: string): Promise<Response> {
     const init: RequestInit = { cache: 'no-cache' }
     try {
-      return await fetch(url, { ...init, signal: AbortSignal.timeout(this.primaryTimeoutMs) })
-    } catch (err: unknown) {
-      const mirrored = this.toMirror(url)
-      if (mirrored === null) throw err
-      return fetch(mirrored, { ...init, signal: AbortSignal.timeout(this.mirrorTimeoutMs) })
+      return await fetch(primary, { ...init, signal: AbortSignal.timeout(this.primaryTimeoutMs) })
+    } catch {
+      return fetch(mirror, { ...init, signal: AbortSignal.timeout(this.mirrorTimeoutMs) })
     }
-  }
-
-  /** Rewrite a primary-origin URL onto the mirror, or null if it is not ours. */
-  private toMirror(url: string): string | null {
-    const prefix = `${this.baseUrl}/`
-    if (!url.startsWith(prefix)) return null
-    return `${this.mirrorUrl}${url.slice(this.baseUrl.length)}`
   }
 }

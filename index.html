@@ -110,12 +110,20 @@
   <h2>Static assets</h2>
   <div class="assets" id="assets"></div>
 
-  <h2>Mirror</h2>
-  <p class="lede">Fallback for when the primary origin is unreachable. Append any repo-relative path.</p>
-  <div class="urlrow" id="mirrorrow"></div>
-  <p class="lede" style="margin-top:.6rem">
-    To bypass the 600s cache and verify production immediately, replace <code>@main</code> with a
-    specific commit sha &mdash; that URL is permanently immutable.
+  <h2>Mirrors</h2>
+  <p class="lede">
+    Fallbacks for when the primary origin is unreachable. Split by resource type, because JSON and
+    images need opposite things and no single jsDelivr endpoint gives both. Append any repo-relative path.
+  </p>
+  <p class="lede" style="margin-top:.8rem"><b>JSON</b> &mdash; purgeable, so API reads stay fresh:</p>
+  <div class="urlrow" id="mirror-json"></div>
+  <p class="lede" style="margin-top:.8rem"><b>Images</b> &mdash; serves bytes directly instead of redirecting to raw:</p>
+  <div class="urlrow" id="mirror-asset"></div>
+  <p class="lede" style="margin-top:.8rem">
+    jsDelivr's purge API only clears <code>cdn</code> and <code>fastly</code>, not <code>gcore</code>,
+    so a replaced image can be up to 12h stale on the asset mirror &mdash; rename the file rather than
+    overwriting it when that matters. To pin an exact version, replace <code>@main</code> with a commit
+    sha; that URL is permanently immutable.
   </p>
 
   <h2>Client usage</h2>
@@ -131,10 +139,13 @@
 // paths -- otherwise previewing over `python3 -m http.server` would hand you
 // 127.0.0.1 URLs that are useless when pasted into code.
 const PROD = 'https://static.bridgic.ai'
-// gcore, not the documented cdn.jsdelivr.net: cdn/fastly answer image requests
-// with a 301 to raw.githubusercontent.com, which is less reliable than either
-// origin. gcore serves image bytes directly.
-const MIRROR = 'https://gcore.jsdelivr.net/gh/bitsky-tech/static@main'
+// Two mirrors, chosen for opposite reasons. JSON uses cdn because that is the
+// only endpoint jsDelivr's purge API clears (measured: cdn served a new commit at
+// age=0 while gcore still had a 3.5h-old copy), and cdn only rewrites image
+// requests. Images use gcore because cdn/fastly answer them with a 301 to
+// raw.githubusercontent.com, which is less reliable than either origin.
+const JSON_MIRROR = 'https://cdn.jsdelivr.net/gh/bitsky-tech/static@main'
+const ASSET_MIRROR = 'https://gcore.jsdelivr.net/gh/bitsky-tech/static@main'
 
 const SNIPPET = `const client = new StaticAssetClient()
 
@@ -144,7 +155,7 @@ const index = await client.getJson('api/index.json', indexManifestSchema)
 // Image manifest; every entry already carries url + mirror
 const images = await client.images()
 images[0].url     // ${PROD}/static/logo.png
-images[0].mirror  // ${MIRROR}/static/logo.png`
+images[0].mirror  // ${ASSET_MIRROR}/static/logo.png`
 
 const $ = (id) => document.getElementById(id)
 const el = (tag, cls) => Object.assign(document.createElement(tag), cls ? { className: cls } : {})
@@ -252,7 +263,8 @@ async function main() {
       e.target.classList.remove('done')
     }, 1400)
   })
-  urlRow(MIRROR, $('mirrorrow'))
+  urlRow(JSON_MIRROR, $('mirror-json'))
+  urlRow(ASSET_MIRROR, $('mirror-asset'))
 
   const eps = $('endpoints')
   let index

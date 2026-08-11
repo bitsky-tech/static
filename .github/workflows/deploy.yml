@@ -94,17 +94,23 @@ jobs:
           exit $fail
 
       # The mirror caches @main for 12h (s-maxage=43200), which for API endpoints
-      # means clients falling back could read half-day-old data. jsDelivr cannot
+      # means a client falling back could read half-day-old data. jsDelivr cannot
       # be configured, but it can be purged, so do that on every publish.
       #
-      # Never fails the job: the deploy already succeeded at this point, and purge
-      # is rate-limited ("throttled" in its response), so a miss here must not
-      # turn a good deployment red.
-      - name: Purge the jsDelivr mirror
+      # Only JSON and HTML: purge reports `providers: {CF, FY}` and measured, it
+      # clears cdn/fastly but NOT gcore. Since images are mirrored via gcore
+      # (cdn 301s them to raw), purging them would spend rate-limited requests
+      # for no effect -- a replaced image stays up to 12h stale on gcore, which
+      # is why the docs say to rename rather than overwrite.
+      #
+      # Never fails the job: the deploy already succeeded, and purge is
+      # rate-limited ("throttled" in its response), so a miss must not turn a
+      # good deployment red.
+      - name: Purge the jsDelivr JSON mirror
         continue-on-error: true
         run: |
           cd _site
-          find . -type f ! -name '.nojekyll' ! -name 'CNAME' | sed 's|^\./||' | while read -r p; do
+          find . -type f \( -name '*.json' -o -name '*.html' \) | sed 's|^\./||' | while read -r p; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
               "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/$p" || true)
             printf '  %-24s %s\n' "$p" "${code:-000}"
